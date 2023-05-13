@@ -5,8 +5,8 @@ After=mysqld.service
 Wants=network.target
 
 [Service]
-WorkingDirectory=/PathToEmbybot
-ExecStart=python3 /PathToEmbybot/embybot.py
+WorkingDirectory=/root/EmbyBot
+ExecStart=python3 /root/EmbyBot/embybot.py
 Restart=on-abnormal
 RestartSec=5s
 KillMode=mixed

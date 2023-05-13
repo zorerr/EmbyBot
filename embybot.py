@@ -21,7 +21,7 @@ engine = create_engine(
 pd_invite_code = None
 pd_config = None
 pd_user = None
-
+pd_admin = None
 
 def db_execute(raw=''):
     if raw == '':
@@ -43,10 +43,17 @@ def pd_to_sql(df_write, table, **kwargs):
 
 
 def IsAdmin(tgid=0):  # TODO change it in database
-    for i in range(0, len(admin_list)):
-        if tgid == admin_list[i]:
-            return True
-    return False
+    global pd_admin
+    pd_admin = pd.read_sql_query('select * from admin;', engine)
+
+    tgid_find = (pd_admin['tgid'] == tgid)
+    tgid_a = (pd_admin[tgid_find]['tgid'])
+    tgid_a = tgid_a.to_list()
+    try:
+        tgid = tgid_a[-1]
+        return True
+    except IndexError:
+        return False
 
 
 def LocalTime(time=''):
@@ -67,7 +74,7 @@ def IsReply(message=''):
 
 async def CreateCode(tgid=0):
     if IsAdmin(tgid=tgid):  # If you are a admin, you can create a code
-        code = f'register-{str(uuid.uuid4())}'
+        code = f'yqm-register-{str(uuid.uuid4())}'
         df_write = pd.DataFrame({'code': code, 'tgid': tgid, 'time': int(time.time()), 'used': 'F'}, index=[0])
         pd_to_sql(df_write, 'invite_code', index=False, if_exists='append')
         return code
@@ -88,6 +95,7 @@ async def invite(tgid=0, message=''):
     code = message[-1]  # get the code
     code_find = (pd_invite_code['code'] == code)
     code = (pd_invite_code[code_find]['code'])
+    owner_tgid = (pd_invite_code[code_find]['tgid'])
     code = code.to_list()
     try:
         code = code[-1]  # find the code if it is in the database
@@ -111,11 +119,34 @@ async def invite(tgid=0, message=''):
             pd_to_sql(df_write, 'user', index=False, if_exists='append')  # add the user info
             pd_invite_code = pd_read_sql_query('select * from invite_code;')
             pd_user = pd_read_sql_query('select * from user;')
-            return 'C'
+            return 'C',owner_tgid
         setcanrig = f"UPDATE `{db_name}`.`user` SET `canrig`='T' WHERE  `tgid`='{tgid}';"
         db_execute(setcanrig)  # update the status that can register
         pd_invite_code = pd_read_sql_query('select * from invite_code;')
         pd_user = pd_read_sql_query('select * from user;')
+        return 'C', owner_tgid  # done
+
+
+async def remove(message=''):
+    global pd_invite_code
+    pd_invite_code = pd_read_sql_query('select * from invite_code;')
+    message = message.split(' ')
+    code = message[-1]  # get the code
+    code_find = (pd_invite_code['code'] == code)
+    code = (pd_invite_code[code_find]['code'])
+    code = code.to_list()
+    try:
+        code = code[-1]  # find the code if it is in the database
+    except IndexError:
+        return 'A'
+    used = (pd_invite_code[code_find]['used'])
+    used = used.to_list()
+    used = used[-1]
+    if used == 'T':
+        return 'B'  # the code has been used
+    else:
+        code_used = f"UPDATE `{db_name}`.`invite_code` SET `used`='T' WHERE  `code`='{code}';"
+        db_execute(code_used)  # set the code has been used
         return 'C'  # done
 
 
@@ -524,6 +555,7 @@ def write_conofig(config='',parms=''):
     db_execute(code_used)
     return 'OK'
 
+
 def ItemsCount():
     r = requests.get(f'{embyurl}/Items/Counts?api_key={embyapi}').text
     r= json.loads(r)
@@ -531,6 +563,98 @@ def ItemsCount():
     SeriesCount = r['SeriesCount']
     EpisodeCount = r['EpisodeCount']
     return MovieCount,SeriesCount,EpisodeCount
+
+
+async def reset(tgid=0):
+    global pd_user
+    global pd_invite_code
+    pd_invite_code = pd.read_sql_query('select * from invite_code;', engine)
+    pd_user = pd.read_sql_query('select * from user;', engine)
+
+    tgid_find = (pd_user['tgid'] == tgid)
+    tgid_a = (pd_user[tgid_find]['tgid'])
+    tgid_a = tgid_a.to_list()
+    try:
+        tgid = tgid_a[-1]
+    except IndexError:
+        return 'NotInTheDatabase'
+    emby_name = (pd_user[tgid_find]['emby_name'])
+    emby_name = emby_name.to_list()
+    emby_name = emby_name[-1]
+    emby_id = (pd_user[tgid_find]['emby_id'])
+    emby_id = emby_id.to_list()
+    emby_id = emby_id[-1]
+    canrig = (pd_user[tgid_find]['canrig'])
+    canrig = canrig.to_list()
+    canrig = canrig[-1]
+    if emby_name != 'None':
+        headers = {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+        }
+        data = '{"CurrentPw":"" , "NewPw":"","ResetPassword" : true}'
+        requests.post(f"{embyurl}/emby/users/{emby_id}/Password?api_key={embyapi}",
+                      headers=headers, data=data)
+        NewPw = ''.join(random.sample(string.ascii_letters + string.digits, 8))
+        data = '{"CurrentPw":"" , "NewPw":"' + NewPw + '","ResetPassword" : false}'
+        requests.post(f"{embyurl}/emby/users/{emby_id}/Password?api_key={embyapi}",
+                      headers=headers, data=data)
+        return 'HaveAnEmby',NewPw
+    else:
+        return 'NotHaveAnEmby',canrig
+
+
+async def del_admin(tgid=0, replyid=0):
+    if IsAdmin(tgid=tgid):
+        global pd_admin
+        pd_admin = pd.read_sql_query('select * from admin;', engine)
+
+        tgid_find = (pd_admin['tgid'] == replyid)
+        tgid_a = (pd_admin[tgid_find]['tgid'])
+        tgid_a = tgid_a.to_list()
+        try:
+            tgid = tgid_a[-1]
+            with engine.begin() as conn:
+                conn.execute(f"delete from admin where tgid={replyid}")
+            return 'Success'
+        except IndexError:
+            return 'NotAdmin'
+    else:
+        return 'A'
+
+
+async def add_admin(tgid=0, replyid=0):
+    if IsAdmin(tgid=tgid):
+        global pd_admin
+        pd_admin = pd.read_sql_query('select * from admin;', engine)
+
+        tgid_find = (pd_admin['tgid'] == replyid)
+        tgid_a = (pd_admin[tgid_find]['tgid'])
+        tgid_a = tgid_a.to_list()
+        try:
+            tgid = tgid_a[-1]
+            return 'IsAdmin'
+        except IndexError:
+            df_write = pd.DataFrame(
+                {'tgid': replyid},
+                index=[0])
+            pd_to_sql(df_write, 'admin', index=False, if_exists='append')  # add the user info
+            return 'Success'
+    else:
+        return 'A'
+
+
+def admin_list(tgid=0):
+    if IsAdmin(tgid=tgid):
+        global pd_admin
+        pd_admin = pd.read_sql_query('select * from admin;', engine)
+        admin_list = pd_admin['tgid'].to_list()
+        text = f"以下为所有管理员，共{len(admin_list)}个\n"
+        for admin in admin_list:
+            text += f'用户<a href="tg://user?id={admin}">{admin}</a>\n'
+        return text
+    else:
+        return 'A'
 
 
 
@@ -544,8 +668,10 @@ async def my_handler(client, message):
                 await message.reply('不是管理员请勿使用管理员命令')
             else:
                 if IsReply(message=message) == False:
-                    await message.reply('邀请码生成成功')
-                    await app.send_message(chat_id=tgid, text=f'生成成功，邀请码<code>{re}</code>')
+                    if message.chat.id == groupid:
+                        await app.send_message(chat_id=groupid, text=f'生成成功，邀请码<code>{re}</code>')
+                    else:
+                        await app.send_message(chat_id=tgid, text=f'生成成功，邀请码<code>{re}</code>')
                 else:
                     replyid = IsReply(message=message)
                     await message.reply('已为这个用户生成邀请码')
@@ -558,7 +684,9 @@ async def my_handler(client, message):
                 await message.reply('没有找到这个邀请码')
             if re == 'B':
                 await message.reply('邀请码已被使用')
-            if re == 'C':
+            if re[0] == 'C':
+                await app.send_message(chat_id=int(re[1]),
+                                       text=f'邀请码<code>{str(message.text).split(" ")[-1]}</code>已被<a href="tg://user?id={tgid}">{tgid}</a>使用')
                 await message.reply('已获得注册资格，邀请码已失效')
             if re == 'D':
                 await message.reply('您已有账号或已经获得注册资格，请不要重复使用邀请码')
@@ -599,7 +727,7 @@ async def my_handler(client, message):
             expired = time.localtime(re)
             expired = time.strftime("%Y/%m/%d %H:%M:%S", expired)
             await message.reply(f"注册已开放，将在{expired}关闭注册")
-    elif str(text) == '/info' or text == f'/info{bot_name}':
+    elif str(text) == '/kankan' or text == f'/kankan{bot_name}':
         replyid = IsReply(message=message)
         if replyid != False:
             re = userinfo(tgid=replyid)
@@ -624,15 +752,15 @@ async def my_handler(client, message):
             elif re[0] == 'NotHaveAnEmby':
                 await message.reply(f'此用户没有emby账号，可注册：{re[1]}')
     elif str(text) == '/help' or str(text) == '/start' or text == f'/start{bot_name}' or text == f'/help{bot_name}':
-        await message.reply('用户命令：\n/invite + 邀请码 使用邀请码获取创建账号资格\n/create + 用户名 创建用户（用户名不可包含空格）\n/info 查看用户信息（仅可查看自己的信息）\n/line 查看线路\n/count 查看服务器内片子数量\n/help 输出'
-                            '本帮助\n管理命令：\n/new_code 创建新的邀请码 \n/register_all_time + 时间（分）开放注册，时长为指定时间\n/register_all_user + 人数 开放指定数量的注册名额\n/info 回复一位用户，查看他的信息\n/ban_emby 禁用一位用户的Emby账号\n/unban_emby 解禁一位用户的Emby账户')
+        await message.reply('用户命令：\n/invite + 邀请码 使用邀请码获取创建账号资格\n/create + 用户名 创建用户（用户名不可包含空格）\n/kankan 查看用户信息（仅可查看自己的信息）\n/count 查看服务器内片子数量\n/line 查看线路\n/求片 格式:/求片 TMDB链接 影片名\n/reset 重置密码\n/help 输出'
+                            '本帮助\n\n管理命令：\n/new_code 创建新的邀请码\n/remove 邀请码管理\n/ad_list 管理员列表\n/register_all_time + 时间（分）开放注册，时长为指定时间\n/register_all_user + 人数 开放指定数量的注册名额\n/kankan 回复一位用户，查看他的信息\n/b_emby 禁用一位用户的Emby账号\n/unb_emby 解禁一位用户的Emby账户\n/add_admin 回复一位用户，添加管理员\n/del_admin 回复一位用户，删除管理员')
     elif str(text).find('/register_all_user') == 0:
         re = await register_all_user(tgid=tgid, message=text)
         if re == 'A':
             await message.reply('您不是管理员，请勿随意使用管理命令')
         else:
             await message.reply(f"注册已开放，本次共有{re}个名额")
-    elif str(text).find('/ban_emby') == 0:
+    elif str(text).find('/b_emby') == 0:
         if IsReply(message=message) != False:
             replyid = IsReply(message=message)
             re = await BanEmby(tgid=tgid, message=message, replyid=replyid)
@@ -647,7 +775,7 @@ async def my_handler(client, message):
                 await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>没有Emby账号，也没有注册资格')
         else:
             await message.reply('请回复一条消息使用该功能')
-    elif str(text).find('/unban_emby') == 0:
+    elif str(text).find('/unb_emby') == 0:
         if IsReply(message=message) != False:
             replyid = IsReply(message=message)
             re = await UnbanEmby(tgid=tgid, message=message, replyid=replyid)
@@ -672,14 +800,68 @@ async def my_handler(client, message):
         text = text.split(' ')
         url = text[1]
         name = text[2]
-        if url.find('imdb.com') == -1 or url.find('ref') != -1 or url.find('title') == -1:
+        if url.find('themoviedb.org') == -1 or url.find('ref') != -1 or url.find('title') == -1:
             await message.reply('链接不符合规范')
         else:
             await message.reply('已发送请求')
-            await app.send_message(chat_id=ban_channel_id,text=f'#求片\n影片名 #{name}\nIMDB链接：<code>{url}</code>\nTGID <a href="tg://user?id={tgid}">{tgid}</a>')
+            await app.send_message(chat_id=groupid,text=f'#求片\n影片名 #{name}\nTMDB链接：<code>{url}</code>\nTGID <a href="tg://user?id={tgid}">{tgid}</a>')
     elif text == '/count' or text == f'/count{bot_name}':
         re = ItemsCount()
         await message.reply(f'🎬电影数量：{re[0]}\n📽️剧集数量：{re[1]}\n🎞️总集数：{re[2]}')
-
-
+    elif str(text).find('/remove') == 0:
+        if prichat(message=message):
+            re = await remove(message=str(message.text))
+            if re == 'A':
+                await message.reply('没有找到这个邀请码')
+            if re == 'B':
+                await message.reply('邀请码已被使用')
+            if re == 'C':
+                await message.reply('邀请码已作废')
+        else:
+            await message.reply('请勿在群组使用该命令')
+    elif str(text).find('/reset') == 0:
+        if prichat(message=message):
+            re = await reset(tgid=tgid)
+            if re == 'NotInTheDatabase':
+                await message.reply('用户未入库，无信息')
+            elif re[0] == 'HaveAnEmby':
+                await app.send_message(chat_id=tgid,
+                                       text=f'用户<a href="tg://user?id={tgid}">{tgid}</a>的Emby账号密码已修改为<code>{re[1]}</code>')
+            elif re[0] == 'NotHaveAnEmby':
+                await message.reply(f'此用户没有emby账号，可注册：{re[1]}')
+        else:
+            await message.reply('请勿在群组使用该命令')
+    elif str(text).find('/add_admin') == 0:
+        if IsReply(message=message) != False:
+            replyid = IsReply(message=message)
+            re = await add_admin(tgid=tgid, replyid=replyid)
+            if re == 'A':
+                await message.reply('不是管理员请勿使用管理员命令')
+            elif re == 'IsAdmin':
+                await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>已经是管理员了')
+            elif re == 'Success':
+                await message.reply(f'成功添加用户<a href="tg://user?id={replyid}">{replyid}</a>为管理员')
+        else:
+            await message.reply('请回复一条消息使用该命令')
+    elif str(text).find('/del_admin') == 0:
+        if IsReply(message=message) != False:
+            replyid = IsReply(message=message)
+            if replyid == 123456:
+                await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>你想造反？')
+            else:
+                re = await del_admin(tgid=tgid, replyid=replyid)
+                if re == 'A':
+                    await message.reply('不是管理员请勿使用管理员命令')
+                elif re == 'Success':
+                    await message.reply(f'成功移除用户<a href="tg://user?id={replyid}">{replyid}</a>管理员权限')
+                elif re == 'NotAdmin':
+                    await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>不是管理员,无法移除')
+        else:
+            await message.reply('请回复一条消息使用该命令')
+    elif str(text).find('/ad_list') == 0:
+        re = admin_list(tgid=tgid)
+        if re == 'A':
+            await message.reply('不是管理员请勿使用管理员命令')
+        else:
+            await message.reply(re)
 app.run()
