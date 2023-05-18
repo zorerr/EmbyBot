@@ -847,7 +847,7 @@ async def my_handler(client, message):
         if IsReply(message=message) != False:
             replyid = IsReply(message=message)
             if replyid == 123456:
-                await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>你想造反？')
+                await message.reply(f'用户<a href="tg://user?id={tgid}">{tgid}</a>你想造反？')
             else:
                 re = await del_admin(tgid=tgid, replyid=replyid)
                 if re == 'A':
