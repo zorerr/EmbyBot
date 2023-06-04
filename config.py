@@ -14,3 +14,4 @@ channelid = -100
 admin_list = [111]
 ban_channel_id = -100
 line = 'xxx'  # config
+member_left_group_ban = True  # 是否退群ban emby

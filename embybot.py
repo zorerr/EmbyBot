@@ -275,8 +275,13 @@ def prichat(message=''):
         return False
 
 
-async def BanEmby(tgid=0, message='', replyid=0):
-    if IsAdmin(tgid=tgid):
+async def BanEmby(bot_ban, tgid=0, message='', replyid=0):
+    is_admin = False
+    if bot_ban: # 如果是bot自动ban的，不用检查权限
+        is_admin = True
+    else:
+        is_admin = isAdmin(tgid=tgid)
+    if is_admin:
         if hadname(tgid=replyid) == 'B':
             global pd_user
             global pd_invite_code
@@ -296,15 +301,15 @@ async def BanEmby(tgid=0, message='', replyid=0):
             emby_id = emby_id.to_list()
             emby_id = emby_id[-1]
             params = (('api_key', embyapi),
-                      )
+                    )
             headers = {
                 'accept': 'application/json',
                 'Content-Type': 'application/json',
             }
             data = '{"IsAdministrator":false,"IsHidden":true,"IsHiddenRemotely":true,"IsDisabled":true,"EnableRemoteControlOfOtherUsers":false,"EnableSharedDeviceControl":false,"EnableRemoteAccess":true,"EnableLiveTvManagement":false,"EnableLiveTvAccess":true,"EnableMediaPlayback":true,"EnableAudioPlaybackTranscoding":false,"EnableVideoPlaybackTranscoding":false,"EnablePlaybackRemuxing":false,"EnableContentDeletion":false,"EnableContentDownloading":false,"EnableSubtitleDownloading":false,"EnableSubtitleManagement":false,"EnableSyncTranscoding":false,"EnableMediaConversion":false,"EnableAllDevices":true,"SimultaneousStreamLimit":3}'
             requests.post(embyurl + '/emby/Users/' + emby_id + '/Policy',
-                          headers=headers,
-                          params=params, data=data)  # update policy
+                        headers=headers,
+                        params=params, data=data)  # update policy
             setbantime = f"UPDATE `{db_name}`.`user` SET `bantime`={int(time.time())} WHERE  `tgid`='{tgid}';"
             db_execute(setbantime)  # update the status that cannot register
             return 'A', emby_name  # Ban the user's emby account
@@ -656,7 +661,16 @@ def admin_list(tgid=0):
     else:
         return 'A'
 
-
+@app.on_message(filters.chat(groupid) & filters.left_chat_member)
+async def member_left_group_handler(client, message):
+    if member_left_group_ban and message and message.left_chat_member and message.left_chat_member.id:
+        replyid = message.left_chat_member.id
+        re = await BanEmby(True, tgid=0, message=message, replyid=replyid)
+        if re[0] == 'A':
+            await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>的Emby账号{re[1]}已被ban\n原因：用户已经退出群组')
+            await app.send_message(chat_id=ban_channel_id, text=f'#Ban\n用户：<a href="tg://user?id={replyid}">{replyid}</a>\nEmby账号：{re[1]}\n原因：退群封禁')
+        elif re[0] == 'C':
+            await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>没有Emby账号，但是已经取消了他的注册资格\n原因：用户已经退出群组')
 
 @app.on_message(filters.text)
 async def my_handler(client, message):
@@ -763,7 +777,7 @@ async def my_handler(client, message):
     elif str(text).find('/b_emby') == 0:
         if IsReply(message=message) != False:
             replyid = IsReply(message=message)
-            re = await BanEmby(tgid=tgid, message=message, replyid=replyid)
+            re = await BanEmby(False,tgid=tgid, message=message, replyid=replyid)
             if re[0] == 'A':
                 await message.reply(f'用户<a href="tg://user?id={replyid}">{replyid}</a>的Emby账号{re[1]}已被ban')
                 await app.send_message(chat_id=ban_channel_id, text=f'#Ban\n用户：<a href="tg://user?id={replyid}">{replyid}</a>\nEmby账号：{re[1]}\n原因：管理员封禁')
