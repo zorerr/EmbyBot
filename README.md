@@ -3,12 +3,14 @@
 <p>1.新增重置密码命令</p>
 <p>2.新增邀请码管理</p>
 <p>3.新增管理员添加，删除，列表</p>
-<p>4.修改ban_emby为/b_emby,/unban_emby为/unb_emby</p>
-<p>5.修改/info为/kankan，防止与其他群管机器人命令重复</p>
-<p>6.添加邀请码使用通知管理员</p>
-<p>7.修改群内发生成邀请码机器人直接发群里</p>
-<p>8.如需要邀请码前缀可修改embybot.py第77行yqm为你的前缀</p>
-<p>9.求片功能用户请求后发送到群里。可修改embybot.py第807行chat_id=groupid,groupid修改为你的tgid</p>
+<p>4.新增退群自动删除账号功能</p>
+<p>5.修改ban_emby为/b_emby,/unban_emby为/unb_emby</p>
+<p>6.修改/info为/kankan，防止与其他群管机器人命令重复</p>
+<p>7.添加邀请码使用通知管理员</p>
+<p>8.修改群内发生成邀请码机器人直接发群里</p>
+<p>9.如需要邀请码前缀可修改embybot.py第77行yqm为你的前缀</p>
+<p>10.求片功能用户请求后发送到群里。可修改embybot.py第807行chat_id=groupid,groupid修改为你的tgid</p>
+
 
 ## 食用教程
 ### 将项目克隆到本地
